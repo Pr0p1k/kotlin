@@ -24,6 +24,10 @@ dependencies {
     testCompile(projectTests(":compiler:tests-common"))
     testCompile(intellijCoreDep()) { includeJars("intellij-core") }
     testCompile(intellijDep()) { includeJars("log4j", "jdom") }
+
+    Platform[192].orHigher {
+        testRuntimeOnly(intellijDep()) { includeJars("platform-objectSerializer") }
+    }
 }
 
 sourceSets {
