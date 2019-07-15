@@ -6,13 +6,8 @@
 package org.jetbrains.kotlinx.serialization.compiler.backend.ir
 
 import org.jetbrains.kotlin.backend.common.BackendContext
-import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
-import org.jetbrains.kotlin.backend.common.lower.irIfThen
-import org.jetbrains.kotlin.backend.common.lower.irThrow
-import org.jetbrains.kotlin.descriptors.ClassConstructorDescriptor
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.backend.common.lower.*
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
@@ -30,7 +25,6 @@ import org.jetbrains.kotlinx.serialization.compiler.backend.common.getSerialType
 import org.jetbrains.kotlinx.serialization.compiler.resolve.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.DECODER_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.ENCODER_CLASS
-import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.KSERIALIZER_NAME
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.SERIAL_DESCRIPTOR_CLASS_IMPL
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.STRUCTURE_DECODER_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.STRUCTURE_ENCODER_CLASS
@@ -171,7 +165,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
 
         }
 
-    override fun generateChildSerializersGetter(function: FunctionDescriptor) = irClass.contributeFunction(function) { irFun ->
+    override fun generateChildSerializersGetter(function: FunctionDescriptor) = irClass.contributeFunction(function, fromStubs = true) { irFun ->
         val allSerializers = serializableProperties.map { requireNotNull(
                 serializerTower(this@SerializerIrGenerator, irFun.dispatchReceiverParameter!!, it)) { "Property ${it.name} must have a serializer" }
         }
@@ -188,7 +182,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
     fun ClassDescriptor.referenceMethod(methodName: String) =
         getFuncDesc(methodName).single().let { compilerContext.externalSymbols.referenceFunction(it) }
 
-    override fun generateSave(function: FunctionDescriptor) = irClass.contributeFunction(function) { saveFunc ->
+    override fun generateSave(function: FunctionDescriptor) = irClass.contributeFunction(function, fromStubs = true) { saveFunc ->
 
         val fieldInitializer: (SerializableProperty) -> IrExpression? =
             buildInitializersRemapping(serializableIrClass).run { { invoke(it.irField) } }
@@ -306,7 +300,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
             defaultPrimitive to kType
     }
 
-    override fun generateLoad(function: FunctionDescriptor) = irClass.contributeFunction(function) { loadFunc ->
+    override fun generateLoad(function: FunctionDescriptor) = irClass.contributeFunction(function, fromStubs = true) { loadFunc ->
         fun irThis(): IrExpression =
             IrGetValueImpl(startOffset, endOffset, loadFunc.dispatchReceiverParameter!!.symbol)
 
