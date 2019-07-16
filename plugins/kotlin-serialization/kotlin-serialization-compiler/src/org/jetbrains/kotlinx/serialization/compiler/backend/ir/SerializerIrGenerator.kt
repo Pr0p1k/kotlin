@@ -6,7 +6,9 @@
 package org.jetbrains.kotlinx.serialization.compiler.backend.ir
 
 import org.jetbrains.kotlin.backend.common.BackendContext
-import org.jetbrains.kotlin.backend.common.lower.*
+import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
+import org.jetbrains.kotlin.backend.common.lower.irIfThen
+import org.jetbrains.kotlin.backend.common.lower.irThrow
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
@@ -430,7 +432,12 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
             compilerContext.externalSymbols.referenceConstructor(serializableDescriptor.unsubstitutedPrimaryConstructor!!)
         }
 
-        +irReturn(irInvoke(null, ctor, typeArgs, args))
+        // todo: throw UnsupportedOperationException when feature branch with `open SerializerGenerator` (enums) will be merged
+        if (serializableDescriptor.modality != Modality.ABSTRACT && serializableDescriptor.modality != Modality.SEALED) {
+            +irReturn(irInvoke(null, ctor, typeArgs, args))
+        } else {
+            +irThrowNpe()
+        }
     }
 
     companion object {
