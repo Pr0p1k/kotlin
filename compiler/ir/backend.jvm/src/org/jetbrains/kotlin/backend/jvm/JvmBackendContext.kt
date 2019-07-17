@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.symbols.IrLocalDelegatedPropertySymbol
 import org.jetbrains.kotlin.ir.util.ReferenceSymbolTable
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.name.FqName
@@ -56,6 +57,8 @@ class JvmBackendContext(
     internal fun putLocalClassInfo(container: IrAttributeContainer, value: LocalClassInfo) {
         localClassInfo[container.attributeOwnerId] = value
     }
+
+    internal val localDelegatedProperties = mutableMapOf<IrClass, List<IrLocalDelegatedPropertySymbol>>()
 
     override var inVerbosePhase: Boolean = false
 
