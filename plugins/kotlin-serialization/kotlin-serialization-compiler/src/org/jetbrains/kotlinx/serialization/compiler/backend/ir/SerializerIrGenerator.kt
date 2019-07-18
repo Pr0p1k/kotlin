@@ -6,9 +6,7 @@
 package org.jetbrains.kotlinx.serialization.compiler.backend.ir
 
 import org.jetbrains.kotlin.backend.common.BackendContext
-import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
-import org.jetbrains.kotlin.backend.common.lower.irIfThen
-import org.jetbrains.kotlin.backend.common.lower.irThrow
+import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
@@ -149,7 +147,7 @@ class SerializerIrGenerator(val irClass: IrClass, override val compilerContext: 
                 compilerContext.irBuiltIns.unitType,
                 primaryCtor.symbol
             ).apply {
-                ctor.typeParameters.forEachIndexed { index, irTypeParameter ->
+                irClass.typeParameters.forEachIndexed { index, irTypeParameter ->
                     putTypeArgument(index, irTypeParameter.defaultType)
                 }
             }
