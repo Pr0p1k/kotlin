@@ -271,7 +271,7 @@ abstract class GradleImportingTestCase : ExternalSystemImportingTestCase() {
 
     companion object {
         const val GRADLE_JDK_NAME = "Gradle JDK"
-        private const val GRADLE_DAEMON_TTL_MS = 10000
+        private const val GRADLE_DAEMON_TTL_MS = 100
 
         @JvmStatic
         protected val SUFFIX = ".after"
