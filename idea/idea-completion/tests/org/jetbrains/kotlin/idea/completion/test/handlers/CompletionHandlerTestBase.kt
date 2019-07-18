@@ -43,6 +43,17 @@ abstract class CompletionHandlerTestBase() : KotlinLightCodeInsightFixtureTestCa
         fixture.checkResultByFile(afterFilePath)
     }
 
+    protected fun completionChars(char: String?, chars: String?): String =
+        when (char) {
+            null -> when (chars) {
+                null -> "\n"
+                else -> chars.replace("\\n", "\n").replace("\\t", "\t")
+            }
+            "\\n" -> "\n"
+            "\\t" -> "\t"
+            else -> char.single().toString() ?: error("Incorrect completion char: \"$char\"")
+        }
+
     protected fun getExistentLookupElement(lookupString: String?, itemText: String?, tailText: String?): LookupElement? {
         val lookup = LookupManager.getInstance(project)?.activeLookup as LookupImpl? ?: return null
         val items = lookup.items
