@@ -55,6 +55,7 @@ import javax.swing.JTree
 
 /**
  * Actually added into ui in [CoroutinesDebugConfigurationExtension.registerCoroutinesPanel]
+ * Some methods are copied from [com.intellij.debugger.ui.impl.ThreadsPanel]
  */
 class CoroutinesPanel(project: Project, stateManager: DebuggerStateManager) : DebuggerTreePanel(project, stateManager) {
     private val myUpdateLabelsAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD)
@@ -96,15 +97,15 @@ class CoroutinesPanel(project: Project, stateManager: DebuggerStateManager) : De
                         buildSuspendStackFrameChildren(descriptor, psiFacade)
                         return true
                     }
-                    is StackFrameDescriptor -> {
-                        GotoFrameSourceAction.doAction(dataContext)
-                        return true
-                    }
                     is CoroutinesDebuggerTree.AsyncStackFrameDescriptor -> {
                         buildAsyncStackFrameChildren(descriptor, context.debugProcess ?: return false)
                         return true
                     }
-                    else -> return true
+                    is StackFrameDescriptor -> {
+                        GotoFrameSourceAction.doAction(dataContext)
+                        return true
+                    }
+                    else -> return true // TODO put nothing in variables for an empty stack frame?
                 }
             }
         }
@@ -168,93 +169,20 @@ class CoroutinesPanel(project: Project, stateManager: DebuggerStateManager) : De
             JavaExecutionStack(proxy, context.debugProcess!!, threadSuspendContext!!.thread == proxy)
         executionStack.initTopFrame()
         val execContext = context.createExecutionContext() ?: return null
-        val continuation = getContinuation(descriptor.state, descriptor.frame, execContext) ?: return null
-        val debugMetadataKtType = execContext
-            .findClass("kotlin.coroutines.jvm.internal.DebugMetadataKt") as ClassType
-        val vars = getSpilledVariables(
-            continuation,
-            debugMetadataKtType, execContext
-        ) ?: return null
-        return executionStack to FakeStackFrame(proxy.frame(0), vars, pos)
-    }
-
-    /**
-     * Find continuation for the [frame]
-     * Gets current CoroutineInfo.lastObservedFrame and finds next frames in it until null or needed frame is found
-     * @return null if matching continuation is not found or is not BaseContinuationImpl
-     */
-    private fun getContinuation(state: CoroutineState, frame: StackTraceElement, context: ExecutionContext): ObjectReference? {
-        var continuation: ObjectReference? = state.frame ?: return null
-        val baseType = "kotlin.coroutines.jvm.internal.BaseContinuationImpl"
-        val getTrace = (continuation!!.type() as ClassType).concreteMethodByName(
+        val continuation = descriptor.continuation // guaranteed that it is a BaseContinuationImpl
+        val aMethod = (continuation.type() as ClassType).concreteMethodByName(
             "getStackTraceElement",
             "()Ljava/lang/StackTraceElement;"
         )
-        val stackTraceType = context.findClass("java.lang.StackTraceElement") as ClassType
-        val getClassName = stackTraceType.concreteMethodByName("getClassName", "()Ljava/lang/String;")
-        val getLineNumber = stackTraceType.concreteMethodByName("getLineNumber", "()I")
-        val className = {
-            val trace = context.invokeMethod(continuation!!, getTrace, emptyList()) as ObjectReference
-            (context.invokeMethod(trace, getClassName, emptyList()) as StringReference).value()
-        }
-        val lineNumber = {
-            val trace = context.invokeMethod(continuation!!, getTrace, emptyList()) as ObjectReference
-            (context.invokeMethod(trace, getLineNumber, emptyList()) as IntegerValue).value()
-        }
-
-        while (continuation != null &&
-            continuation.type().isSubtype(baseType)
-            && (frame.className != className() || frame.lineNumber != lineNumber()) // continuation frame equals to the current
-        ) {
-            continuation = state.getNextFrame(continuation, context)
-        }
-        return if (continuation != null && continuation.type().isSubtype(baseType)) continuation else null
+        val debugMetadataKtType = execContext
+            .findClass("kotlin.coroutines.jvm.internal.DebugMetadataKt") as ClassType
+        val vars = with(KotlinCoroutinesAsyncStackTraceProvider()) {
+            KotlinCoroutinesAsyncStackTraceProvider
+                .AsyncStackTraceContext(execContext, aMethod, debugMetadataKtType)
+                .getSpilledVariables(continuation)
+        } ?: return null
+        return executionStack to FakeStackFrame(descriptor, vars, pos)
     }
-
-    private fun getSpilledVariables(
-        continuation: ObjectReference,
-        debugMetadataKtType: ClassType,
-        context: ExecutionContext
-    ): List<XNamedValue>? {
-        val getSpilledVariableFieldMappingMethod = debugMetadataKtType.methodsByName(
-            "getSpilledVariableFieldMapping",
-            "(Lkotlin/coroutines/jvm/internal/BaseContinuationImpl;)[Ljava/lang/String;"
-        ).firstOrNull() ?: return null
-
-        val args = listOf(continuation)
-
-        val rawSpilledVariables = context.invokeMethod(
-            debugMetadataKtType,
-            getSpilledVariableFieldMappingMethod, args
-        ) as? ArrayReference ?: return null
-
-        val length = rawSpilledVariables.length() / 2
-        val spilledVariables = ArrayList<XNamedValue>(length)
-
-        for (index in 0 until length) {
-            val fieldName = (rawSpilledVariables.getValue(2 * index) as? StringReference)?.value() ?: continue
-            val variableName = (rawSpilledVariables.getValue(2 * index + 1) as? StringReference)?.value() ?: continue
-            val field = continuation.referenceType().fieldByName(fieldName) ?: continue
-
-            val valueDescriptor = object : ValueDescriptorImpl(context.project) {
-                override fun calcValueName() = variableName
-                override fun calcValue(evaluationContext: EvaluationContextImpl?) = continuation.getValue(field)
-                override fun getDescriptorEvaluation(context: DebuggerContext?) =
-                    throw EvaluateException("Spilled variable evaluation is not supported")
-            }
-
-            spilledVariables += JavaValue.create(
-                null,
-                valueDescriptor,
-                context.evaluationContext,
-                context.debugProcess.xdebugProcess!!.nodeManager,
-                false
-            )
-        }
-
-        return spilledVariables
-    }
-
 
     private fun startLabelsUpdate() {
         if (myUpdateLabelsAlarm.isDisposed) return

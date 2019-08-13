@@ -20,6 +20,7 @@ import com.intellij.jarRepository.JarRepositoryManager
 import com.intellij.jarRepository.RemoteRepositoryDescription
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.libraries.ui.OrderRoot
+import com.intellij.openapi.util.Key
 import com.intellij.ui.content.ContentManagerAdapter
 import com.intellij.ui.content.ContentManagerEvent
 import com.intellij.xdebugger.XDebugProcess
@@ -27,13 +28,14 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebuggerManagerListener
 import org.jetbrains.idea.maven.aether.ArtifactKind
 import org.jetbrains.jps.model.library.JpsMavenRepositoryLibraryDescriptor
+import org.jetbrains.kotlin.psi.UserDataProperty
 
 /**
  * Installs coroutines debug agent and coroutines tab if `kotlinx.coroutines.debug` dependency is found
  */
 @Suppress("IncompatibleAPI")
 class CoroutinesDebugConfigurationExtension : RunConfigurationExtension() {
-    private var listenerCreated = false
+    private var Project.listenerCreated: Boolean? by UserDataProperty(Key.create("COROUTINES_DEBUG_TAB_CREATE_LISTENER"))
 
     override fun isApplicableFor(configuration: RunConfigurationBase<*>): Boolean {
         // unable to check dependencies, so let it be true, since it patches only,
@@ -55,21 +57,20 @@ class CoroutinesDebugConfigurationExtension : RunConfigurationExtension() {
                 // if debug library is included into project, add agent which installs probes
                 params.vmParametersList?.add("-javaagent:$it")
                 params.vmParametersList?.add("-ea")
-
+                val project = (configuration as RunConfigurationBase<*>).project
                 // add listener to put coroutines tab into debugger tab
-                if (!listenerCreated) { // prevent multiple listeners creation
-                    (configuration as RunConfigurationBase<*>).project.messageBus.connect().subscribe(
+                if (project.listenerCreated != true) { // prevent multiple listeners creation
+                    project.messageBus.connect().subscribe(
                         XDebuggerManager.TOPIC,
                         object : XDebuggerManagerListener {
                             override fun processStarted(debugProcess: XDebugProcess) {
-                                val project = debugProcess.session.project
                                 val session = DebuggerManagerEx.getInstanceEx(project).context.debuggerSession
                                 DebuggerInvocationUtil.swingInvokeLater(project) {
                                     registerCoroutinesPanel(session?.xDebugSession?.ui ?: return@swingInvokeLater, session)
                                 }
                             }
                         })
-                    listenerCreated = true
+                    project.listenerCreated = true
                     return
                 }
             }

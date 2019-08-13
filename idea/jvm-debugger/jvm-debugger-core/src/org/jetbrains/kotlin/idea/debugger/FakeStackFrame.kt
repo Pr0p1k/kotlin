@@ -6,8 +6,6 @@
 package org.jetbrains.kotlin.idea.debugger
 
 import com.intellij.debugger.engine.JavaStackFrame
-import com.intellij.debugger.jdi.StackFrameProxyImpl
-import com.intellij.debugger.ui.impl.watch.MethodsTracker
 import com.intellij.debugger.ui.impl.watch.StackFrameDescriptorImpl
 import com.intellij.xdebugger.XSourcePosition
 import com.intellij.xdebugger.frame.XCompositeNode
@@ -17,8 +15,8 @@ import com.intellij.xdebugger.frame.XValueChildrenList
 /**
  * Puts the frameProxy into JavaStackFrame just to instantiate. FakeStackFrame provides it's own data for variables view.
  */
-class FakeStackFrame(frame: StackFrameProxyImpl, private val vars: List<XNamedValue>, private val position: XSourcePosition) :
-    JavaStackFrame(StackFrameDescriptorImpl(frame, MethodsTracker()), true) {
+class FakeStackFrame(descriptor: StackFrameDescriptorImpl, private val vars: List<XNamedValue>, private val position: XSourcePosition) :
+    JavaStackFrame(descriptor, true) {
 
     override fun computeChildren(node: XCompositeNode) {
         val list = XValueChildrenList()
@@ -28,5 +26,17 @@ class FakeStackFrame(frame: StackFrameProxyImpl, private val vars: List<XNamedVa
 
     override fun getSourcePosition(): XSourcePosition? {
         return position
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+
+        val frame = other as? JavaStackFrame ?: return false
+
+        return descriptor.frameProxy == frame.descriptor.frameProxy
+    }
+
+    override fun hashCode(): Int {
+        return descriptor.frameProxy.hashCode()
     }
 }

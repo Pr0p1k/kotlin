@@ -5,9 +5,7 @@
 
 package org.jetbrains.kotlin.idea.debugger
 
-import com.sun.jdi.ClassType
-import com.sun.jdi.ObjectReference
-import com.sun.jdi.ThreadReference
+import com.sun.jdi.*
 import org.jetbrains.kotlin.idea.debugger.evaluate.ExecutionContext
 
 /**
@@ -25,8 +23,9 @@ class CoroutineState(
     val isEmptyStackTrace: Boolean by lazy { stackTrace.isEmpty() }
     val stringStackTrace: String by lazy {
         buildString {
+            appendln("\"$name\", state: $state")
             stackTrace.forEach {
-                appendln(it)
+                appendln("\t$it")
             }
         }
     }
@@ -35,10 +34,43 @@ class CoroutineState(
      * Finds previous Continuation for this Continuation (completion field in BaseContinuationImpl)
      * @return null if given ObjectReference is not a BaseContinuationImpl instance or completion is null
      */
-    fun getNextFrame(continuation: ObjectReference, context: ExecutionContext): ObjectReference? {
+    private fun getNextFrame(continuation: ObjectReference, context: ExecutionContext): ObjectReference? {
         val type = continuation.type() as ClassType
         if (!type.isSubtype("kotlin.coroutines.jvm.internal.BaseContinuationImpl")) return null
         val next = type.concreteMethodByName("getCompletion", "()Lkotlin/coroutines/Continuation;")
         return context.invokeMethod(continuation, next, emptyList()) as? ObjectReference
+    }
+
+    /**
+     * Find continuation for the [stackTraceElement]
+     * Gets current CoroutineInfo.lastObservedFrame and finds next frames in it until null or needed stackTraceElement is found
+     * @return null if matching continuation is not found or is not BaseContinuationImpl
+     */
+    fun getContinuation(stackTraceElement: StackTraceElement, context: ExecutionContext): ObjectReference? {
+        var continuation: ObjectReference? = frame ?: return null
+        val baseType = "kotlin.coroutines.jvm.internal.BaseContinuationImpl"
+        val getTrace = (continuation!!.type() as ClassType).concreteMethodByName(
+            "getStackTraceElement",
+            "()Ljava/lang/StackTraceElement;"
+        )
+        val stackTraceType = context.findClass("java.lang.StackTraceElement") as ClassType
+        val getClassName = stackTraceType.concreteMethodByName("getClassName", "()Ljava/lang/String;")
+        val getLineNumber = stackTraceType.concreteMethodByName("getLineNumber", "()I")
+        val className = {
+            val trace = context.invokeMethod(continuation!!, getTrace, emptyList()) as ObjectReference
+            (context.invokeMethod(trace, getClassName, emptyList()) as StringReference).value()
+        }
+        val lineNumber = {
+            val trace = context.invokeMethod(continuation!!, getTrace, emptyList()) as ObjectReference
+            (context.invokeMethod(trace, getLineNumber, emptyList()) as IntegerValue).value()
+        }
+
+        while (continuation != null &&
+            continuation.type().isSubtype(baseType)
+            && (stackTraceElement.className != className() || stackTraceElement.lineNumber != lineNumber()) // continuation frame equals to the current
+        ) {
+            continuation = getNextFrame(continuation, context)
+        }
+        return if (continuation != null && continuation.type().isSubtype(baseType)) continuation else null
     }
 }
